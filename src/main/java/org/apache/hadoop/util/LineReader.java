@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- * <p>
- * http://www.apache.org/licenses/LICENSE-2.0
- * <p>
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -18,15 +18,19 @@
 
 package org.apache.hadoop.util;
 
-import io.trino.hadoop.TextLineLengthLimitExceededException;
-import org.apache.hadoop.classification.InterfaceAudience;
-import org.apache.hadoop.classification.InterfaceStability;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.io.Text;
-
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
+
+import org.apache.hadoop.classification.InterfaceAudience;
+import org.apache.hadoop.classification.InterfaceStability;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.statistics.IOStatistics;
+import org.apache.hadoop.fs.statistics.IOStatisticsSource;
+import org.apache.hadoop.fs.statistics.IOStatisticsSupport;
+import org.apache.hadoop.io.Text;
+
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IO_FILE_BUFFER_SIZE_KEY;
 
 /**
  * A class that provides a line reader from an input stream.
@@ -41,18 +45,8 @@ import java.io.InputStream;
  */
 @InterfaceAudience.LimitedPrivate({"MapReduce"})
 @InterfaceStability.Unstable
-public class LineReader
-        implements Closeable
-{
-    // Limitation for array size is VM specific. Current HotSpot VM limitation
-    // for array size is Integer.MAX_VALUE - 5 (2^31 - 1 - 5).
-    // Integer.MAX_VALUE - 8 should be safe enough.
-    private static final int MAX_ARRAY_SIZE = Integer.MAX_VALUE - 8;
+public class LineReader implements Closeable, IOStatisticsSource {
     private static final int DEFAULT_BUFFER_SIZE = 64 * 1024;
-    private static final byte CR = '\r';
-    private static final byte LF = '\n';
-    // The line delimiter
-    private final byte[] recordDelimiterBytes;
     private int bufferSize = DEFAULT_BUFFER_SIZE;
     private InputStream in;
     private byte[] buffer;
@@ -61,14 +55,18 @@ public class LineReader
     // the current position in the buffer
     private int bufferPosn = 0;
 
+    private static final byte CR = '\r';
+    private static final byte LF = '\n';
+
+    // The line delimiter
+    private final byte[] recordDelimiterBytes;
+
     /**
      * Create a line reader that reads from the given stream using the
      * default buffer-size (64k).
      * @param in The input stream
-     * @throws IOException
      */
-    public LineReader(InputStream in)
-    {
+    public LineReader(InputStream in) {
         this(in, DEFAULT_BUFFER_SIZE);
     }
 
@@ -77,10 +75,8 @@ public class LineReader
      * given buffer-size.
      * @param in The input stream
      * @param bufferSize Size of the read buffer
-     * @throws IOException
      */
-    public LineReader(InputStream in, int bufferSize)
-    {
+    public LineReader(InputStream in, int bufferSize) {
         this.in = in;
         this.bufferSize = bufferSize;
         this.buffer = new byte[this.bufferSize];
@@ -95,10 +91,8 @@ public class LineReader
      * @param conf configuration
      * @throws IOException
      */
-    public LineReader(InputStream in, Configuration conf)
-            throws IOException
-    {
-        this(in, conf.getInt("io.file.buffer.size", DEFAULT_BUFFER_SIZE));
+    public LineReader(InputStream in, Configuration conf) throws IOException {
+        this(in, conf.getInt(IO_FILE_BUFFER_SIZE_KEY, DEFAULT_BUFFER_SIZE));
     }
 
     /**
@@ -108,8 +102,7 @@ public class LineReader
      * @param in The input stream
      * @param recordDelimiterBytes The delimiter
      */
-    public LineReader(InputStream in, byte[] recordDelimiterBytes)
-    {
+    public LineReader(InputStream in, byte[] recordDelimiterBytes) {
         this.in = in;
         this.bufferSize = DEFAULT_BUFFER_SIZE;
         this.buffer = new byte[this.bufferSize];
@@ -123,11 +116,9 @@ public class LineReader
      * @param in The input stream
      * @param bufferSize Size of the read buffer
      * @param recordDelimiterBytes The delimiter
-     * @throws IOException
      */
     public LineReader(InputStream in, int bufferSize,
-            byte[] recordDelimiterBytes)
-    {
+                      byte[] recordDelimiterBytes) {
         this.in = in;
         this.bufferSize = bufferSize;
         this.buffer = new byte[this.bufferSize];
@@ -145,23 +136,29 @@ public class LineReader
      * @throws IOException
      */
     public LineReader(InputStream in, Configuration conf,
-            byte[] recordDelimiterBytes)
-            throws IOException
-    {
+                      byte[] recordDelimiterBytes) throws IOException {
         this.in = in;
-        this.bufferSize = conf.getInt("io.file.buffer.size", DEFAULT_BUFFER_SIZE);
+        this.bufferSize = conf.getInt(IO_FILE_BUFFER_SIZE_KEY, DEFAULT_BUFFER_SIZE);
         this.buffer = new byte[this.bufferSize];
         this.recordDelimiterBytes = recordDelimiterBytes;
     }
+
 
     /**
      * Close the underlying stream.
      * @throws IOException
      */
-    public void close()
-            throws IOException
-    {
+    public void close() throws IOException {
         in.close();
+    }
+
+    /**
+     * Return any IOStatistics provided by the source.
+     * @return IO stats from the input stream.
+     */
+    @Override
+    public IOStatistics getIOStatistics() {
+        return IOStatisticsSupport.retrieveIOStatistics(in);
     }
 
     /**
@@ -181,22 +178,16 @@ public class LineReader
      * @throws IOException if the underlying stream throws
      */
     public int readLine(Text str, int maxLineLength,
-            int maxBytesToConsume)
-            throws IOException
-    {
-        maxLineLength = Math.min(maxLineLength, MAX_ARRAY_SIZE);
-        maxBytesToConsume = Math.min(maxBytesToConsume, MAX_ARRAY_SIZE);
+                        int maxBytesToConsume) throws IOException {
         if (this.recordDelimiterBytes != null) {
             return readCustomLine(str, maxLineLength, maxBytesToConsume);
-        }
-        else {
+        } else {
             return readDefaultLine(str, maxLineLength, maxBytesToConsume);
         }
     }
 
     protected int fillBuffer(InputStream in, byte[] buffer, boolean inDelimiter)
-            throws IOException
-    {
+            throws IOException {
         return in.read(buffer);
     }
 
@@ -204,8 +195,7 @@ public class LineReader
      * Read a line terminated by one of CR, LF, or CRLF.
      */
     private int readDefaultLine(Text str, int maxLineLength, int maxBytesToConsume)
-            throws IOException
-    {
+            throws IOException {
         /* We're reading data from in, but the head of the stream may be
          * already buffered in buffer, so we have several cases:
          * 1. No newline characters are in the buffer, so we need to copy
@@ -259,39 +249,24 @@ public class LineReader
             int appendLength = readLength - newlineLength;
             if (appendLength > maxLineLength - txtLength) {
                 appendLength = maxLineLength - txtLength;
-                if (appendLength > 0) {
-                    // We want to fail the read when the line length is over the limit.
-                    throw new TextLineLengthLimitExceededException("Too many bytes before newline: " + maxLineLength);
-                }
             }
             if (appendLength > 0) {
-                int newTxtLength = txtLength + appendLength;
-                if (str.getBytes().length < newTxtLength && Math.max(newTxtLength, txtLength << 1) > MAX_ARRAY_SIZE) {
-                    // If str need to be resized but the target capacity is over VM limit, it will trigger OOM.
-                    // In such case we will throw an IOException so the caller can deal with it.
-                    throw new TextLineLengthLimitExceededException("Too many bytes before newline: " + newTxtLength);
-                }
                 str.append(buffer, startPosn, appendLength);
-                txtLength = newTxtLength;
+                txtLength += appendLength;
             }
-        }
-        while (newlineLength == 0 && bytesConsumed < maxBytesToConsume);
+        } while (newlineLength == 0 && bytesConsumed < maxBytesToConsume);
 
-        if (newlineLength == 0 && bytesConsumed >= maxBytesToConsume) {
-            // It is possible that bytesConsumed is over the maxBytesToConsume but we
-            // didn't append anything to str.bytes. If we have consumed over maxBytesToConsume
-            // bytes but still haven't seen a line terminator, we will fail the read.
-            throw new TextLineLengthLimitExceededException("Too many bytes before newline: " + bytesConsumed);
+        if (bytesConsumed > Integer.MAX_VALUE) {
+            throw new IOException("Too many bytes before newline: " + bytesConsumed);
         }
-        return (int) bytesConsumed;
+        return (int)bytesConsumed;
     }
 
     /**
      * Read a line terminated by a custom delimiter.
      */
     private int readCustomLine(Text str, int maxLineLength, int maxBytesToConsume)
-            throws IOException
-    {
+            throws IOException {
         /* We're reading data from inputStream, but the head of the stream may be
          *  already captured in the previous buffer, so we have several cases:
          *
@@ -332,7 +307,7 @@ public class LineReader
         int txtLength = 0; // tracks str.getLength(), as an optimization
         long bytesConsumed = 0;
         int delPosn = 0;
-        int ambiguousByteCount = 0; // To capture the ambiguous characters count
+        int ambiguousByteCount=0; // To capture the ambiguous characters count
         do {
             int startPosn = bufferPosn; // Start from previous end position
             if (bufferPosn >= bufferLength) {
@@ -353,10 +328,9 @@ public class LineReader
                         bufferPosn++;
                         break;
                     }
-                }
-                else if (delPosn != 0) {
+                } else if (delPosn != 0) {
                     bufferPosn -= delPosn;
-                    if (bufferPosn < -1) {
+                    if(bufferPosn < -1) {
                         bufferPosn = -1;
                     }
                     delPosn = 0;
@@ -367,10 +341,6 @@ public class LineReader
             int appendLength = readLength - delPosn;
             if (appendLength > maxLineLength - txtLength) {
                 appendLength = maxLineLength - txtLength;
-                if (appendLength > 0) {
-                    // We want to fail the read when the line length is over the limit.
-                    throw new TextLineLengthLimitExceededException("Too many bytes before delimiter: " + maxLineLength);
-                }
             }
             bytesConsumed += ambiguousByteCount;
             if (appendLength >= 0 && ambiguousByteCount > 0) {
@@ -383,14 +353,8 @@ public class LineReader
                 unsetNeedAdditionalRecordAfterSplit();
             }
             if (appendLength > 0) {
-                int newTxtLength = txtLength + appendLength;
-                if (str.getBytes().length < newTxtLength && Math.max(newTxtLength, txtLength << 1) > MAX_ARRAY_SIZE) {
-                    // If str need to be resized but the target capacity is over VM limit, it will trigger OOM.
-                    // In such case we will throw an IOException so the caller can deal with it.
-                    throw new TextLineLengthLimitExceededException("Too many bytes before delimiter: " + newTxtLength);
-                }
                 str.append(buffer, startPosn, appendLength);
-                txtLength = newTxtLength;
+                txtLength += appendLength;
             }
             if (bufferPosn >= bufferLength) {
                 if (delPosn > 0 && delPosn < recordDelimiterBytes.length) {
@@ -398,15 +362,10 @@ public class LineReader
                     bytesConsumed -= ambiguousByteCount; //to be consumed in next
                 }
             }
-        }
-        while (delPosn < recordDelimiterBytes.length
+        } while (delPosn < recordDelimiterBytes.length
                 && bytesConsumed < maxBytesToConsume);
-        if (delPosn < recordDelimiterBytes.length
-                && bytesConsumed >= maxBytesToConsume) {
-            // It is possible that bytesConsumed is over the maxBytesToConsume but we
-            // didn't append anything to str.bytes. If we have consumed over maxBytesToConsume
-            // bytes but still haven't seen a line terminator, we will fail the read.
-            throw new TextLineLengthLimitExceededException("Too many bytes before delimiter: " + bytesConsumed);
+        if (bytesConsumed > Integer.MAX_VALUE) {
+            throw new IOException("Too many bytes before delimiter: " + bytesConsumed);
         }
         return (int) bytesConsumed;
     }
@@ -418,9 +377,7 @@ public class LineReader
      * @return the number of bytes read including the newline
      * @throws IOException if the underlying stream throws
      */
-    public int readLine(Text str, int maxLineLength)
-            throws IOException
-    {
+    public int readLine(Text str, int maxLineLength) throws IOException {
         return readLine(str, maxLineLength, Integer.MAX_VALUE);
     }
 
@@ -430,24 +387,19 @@ public class LineReader
      * @return the number of bytes read including the newline
      * @throws IOException if the underlying stream throws
      */
-    public int readLine(Text str)
-            throws IOException
-    {
+    public int readLine(Text str) throws IOException {
         return readLine(str, Integer.MAX_VALUE, Integer.MAX_VALUE);
     }
 
-    protected int getBufferPosn()
-    {
+    protected int getBufferPosn() {
         return bufferPosn;
     }
 
-    protected int getBufferSize()
-    {
+    protected int getBufferSize() {
         return bufferSize;
     }
 
-    protected void unsetNeedAdditionalRecordAfterSplit()
-    {
+    protected void unsetNeedAdditionalRecordAfterSplit() {
         // needed for custom multi byte line delimiters only
         // see MAPREDUCE-6549 for details
     }
