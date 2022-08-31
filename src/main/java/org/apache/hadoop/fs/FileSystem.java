@@ -202,8 +202,8 @@ public abstract class FileSystem extends Configured
   public static final String TRASH_PREFIX = ".Trash";
   public static final String USER_HOME_PREFIX = "/user";
 
-  /** FileSystem cache. */
-  static final Cache CACHE = new Cache(new Configuration());
+  /** FileSystem cache. May be replaced by {@link FileSystemManager}. */
+  static volatile Cache CACHE = new Cache(new Configuration());
 
   /** The key this instance is stored under in the cache. */
   private Cache.Key key;
@@ -493,7 +493,7 @@ public abstract class FileSystem extends Configured
    */
   public static LocalFileSystem getLocal(Configuration conf)
           throws IOException {
-    return (LocalFileSystem)get(LocalFileSystem.NAME, conf);
+    return ensureLocalFileSystem(get(LocalFileSystem.NAME, conf));
   }
 
   /**
@@ -613,7 +613,14 @@ public abstract class FileSystem extends Configured
    */
   public static LocalFileSystem newInstanceLocal(Configuration conf)
           throws IOException {
-    return (LocalFileSystem)newInstance(LocalFileSystem.NAME, conf);
+    return ensureLocalFileSystem(newInstance(LocalFileSystem.NAME, conf));
+  }
+
+  private static LocalFileSystem ensureLocalFileSystem(FileSystem fileSystem) {
+    if (fileSystem instanceof LocalFileSystem) {
+      return (LocalFileSystem) fileSystem;
+    }
+    return new LocalFileSystemWrapper(fileSystem);
   }
 
   /**
@@ -3483,7 +3490,7 @@ public abstract class FileSystem extends Configured
   }
 
   /** Caching FileSystem objects. */
-  static final class Cache {
+  static class Cache {
     private final ClientFinalizer clientFinalizer = new ClientFinalizer();
 
     private final Map<Key, FileSystem> map = new HashMap<>();
