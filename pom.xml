@@ -582,6 +582,10 @@
                                     <shadedPattern>${shadeBase}.com.squareup.okhttp3</shadedPattern>
                                 </relocation>
                                 <relocation>
+                                    <pattern>okhttp3</pattern>
+                                    <shadedPattern>${shadeBase}.okhttp3</shadedPattern>
+                                </relocation>
+                                <relocation>
                                     <pattern>okio</pattern>
                                     <shadedPattern>${shadeBase}.okio</shadedPattern>
                                 </relocation>
