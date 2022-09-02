@@ -706,13 +706,6 @@
                                     </excludes>
                                 </filter>
                                 <filter>
-                                    <artifact>org.apache.hadoop:hadoop-auth</artifact>
-                                    <excludes>
-                                        <exclude>org/apache/hadoop/security/authentication/util/KerberosUtil.class</exclude>
-                                        <exclude>org/apache/hadoop/security/authentication/util/KerberosUtil$*.class</exclude>
-                                    </excludes>
-                                </filter>
-                                <filter>
                                     <artifact>org.apache.hadoop:hadoop-azure</artifact>
                                     <excludes>
                                         <exclude>org/apache/hadoop/fs/azurebfs/AzureBlobFileSystemStore.class</exclude>
