@@ -578,8 +578,8 @@
                                     <shadedPattern>${shadeBase}.org.slf4j</shadedPattern>
                                 </relocation>
                                 <relocation>
-                                    <pattern>com.squareup.okhttp</pattern>
-                                    <shadedPattern>${shadeBase}.com.squareup.okhttp</shadedPattern>
+                                    <pattern>com.squareup.okhttp3</pattern>
+                                    <shadedPattern>${shadeBase}.com.squareup.okhttp3</shadedPattern>
                                 </relocation>
                                 <relocation>
                                     <pattern>okio</pattern>
@@ -605,6 +605,12 @@
                                 <relocation>
                                     <pattern>org.codehaus.mojo</pattern>
                                     <shadedPattern>${shadeBase}.org.codehaus.mojo</shadedPattern>
+                                </relocation>
+                                <!-- from org.jetbrains.kotlin -->
+                                <!-- may need to revise in the near future, see https://github.com/apache/hadoop/pull/4229#issuecomment-1179963242 -->
+                                <relocation>
+                                    <pattern>kotlin</pattern>
+                                    <shadedPattern>${shadeBase}.kotlin</shadedPattern>
                                 </relocation>
                             </relocations>
                             <filters>
