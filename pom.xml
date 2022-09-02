@@ -589,6 +589,11 @@
                                     <pattern>jakarta.activation</pattern>
                                     <shadedPattern>${shadeBase}.jakarta.activation</shadedPattern>
                                 </relocation>
+                                <!-- from com.google.code.findbugs: -->
+                                <relocation>
+                                    <pattern>javax.annotation</pattern>
+                                    <shadedPattern>${shadeBase}.javax.annotation</shadedPattern>
+                                </relocation>
                                 <!-- this comes from jakarta.activation -->
                                 <relocation>
                                     <pattern>javax.activation</pattern>
